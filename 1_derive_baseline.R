@@ -54,7 +54,7 @@ names(bl2014)
 rm(day2014, household2014, ind2014, stage2014, trip2014)
 
 #add extra variables
-bl2014$Age = bl2014$Sex =NULL
+bl2014$Age = bl2014$Sex =NA
 bl2014$Age[bl2014$Age_B01ID<16] <- '16.59'
 bl2014$Age[bl2014$Age_B01ID>=16] <- '60plus'
 bl2014$Sex[bl2014$Sex_B01ID==1] <- 'Male'
@@ -102,7 +102,7 @@ tripswalkstages <- sqldf(x=str_sql)
 
 #####################  COMBINE: CYCLABLE trips + WALKABLE stages:
 
-sql_str <- 'SELECT T1.SurveyYear, T1.TripID, T1.NumStages, 
+str_sql <- 'SELECT T1.SurveyYear, T1.TripID, T1.NumStages, 
 T1.IndividualID, T1.TravDay, T1.SeriesCall_B01ID, 
 T1.ShortWalkTrip_B01ID, T1.MainMode_B03ID, T1.TripTotalTime, 
 T1.TripDisIncSW, T1.TripDisExSW, T2.StageID, 
@@ -115,6 +115,16 @@ FROM tripscyclable AS T1 LEFT JOIN tripswalkstages AS T2 ON T1.TripID = T2.TripI
 ORDER BY T1.SurveyYear, T1.NumStages DESC , T2.StageID '
 
 #NON-EXISTENT COLUMNS:  , T2.SD_woW5, T2.SSXSC_woW5, T2.STTXSC_woW5
-wc <- sqldf(x=sql_str)    #cyclable trips w. walked stages added
+wc <- sqldf(x=str_sql)    #cyclable trips w. walked stages added
 
+
+###### calculate  TIMES/DISTANCES (for walking stages)
+str_sql <- 'SELECT wc.TripID, Sum(wc.StageDistance) AS SumofWStageDistance, 
+Sum(wc.StageTime) AS SumOfWStageTime, Sum(wc.STTXSC) AS SumOfSTTXSC, 
+Sum(wc.SD) AS SumOfSD
+
+FROM wc
+GROUP BY wc.TripID   '
+
+wc <- sqldf(x= str_sql)
 
