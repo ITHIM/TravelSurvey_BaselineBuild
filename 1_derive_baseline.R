@@ -1,5 +1,4 @@
 
-
 #prepare for SQL processing
 library(sqldf)
 library(dplyr)
@@ -22,19 +21,22 @@ household2014  <- household2014[ ,c('HouseholdID', 'HHoldGOR_B02ID')]
 # filter days/stages
 #day2014 <-  day2014[ ,]
 stage2014 <- stage2014[ ,c('SurveyYear', 'StageID', 'TripID', 'DayID', 
-                           'IndividualID', 'HouseholdID', 'PSUID', 'VehicleID', 
+                           'IndividualID', 'HouseholdID', 'PSUID', 'VehicleID', 'StageShortWalk_B01ID',
                            'IndTicketID', 'PersNo', 'TravDay', 'JourSeq', 'StageMode_B03ID',
                            'StageMode_B04ID','StageMode_B11ID','StageSeq', 'StageDistance',
                            'StageDistance_B01ID', 'StageTime', 
-                           'StageTime_B01ID', 'StageMain_B01ID', 'SSXSC', 'STTXSC', 'SD')]
+                           'StageTime_B01ID', 'StageMain_B01ID', 
+                            'W5', 'W5xHH','SSXSC', 'STTXSC', 'SD')]
+
+# T2.W5, T2.W5xHH, T2.SSXSC, T2.STTXSC, T2.SD,    additional fields for extra precision
 
 
-# create initial baseline (no mMETs , filtered to >=18 y.o., English regions 1-10)
+#### Create initial baseline = no mMETs , filtered to >=18 y.o., English regions 1..9)
 
-household2014$HHoldGOR_B02ID = as.character(household2014$HHoldGOR_B02ID)
+#household2014$HHoldGOR_B02ID = as.character(household2014$HHoldGOR_B02ID)
 
-str_sql <- 'SELECT T2.Age_B01ID, T2.Sex_B01ID, T3.HHoldGOR_B02ID,
-T2.CarAccess_B01ID, T2.NSSec_B03ID, T2.IndIncome2002_B02ID, T2.EthGroupTS_B02ID, 
+str_sql <- 'SELECT T2.Age_B01ID, T2.Sex_B01ID, T2.CarAccess_B01ID, T2.NSSec_B03ID, 
+T2.IndIncome2002_B02ID, T2.EthGroupTS_B02ID, 
 T1.SurveyYear, T1.TripID, T1.DayID, T1.IndividualID, T1.HouseholdID, 
 T1.PSUID, T1.W5, T1.W5xHH, T1.TravDay, T1.SeriesCall_B01ID, T1.ShortWalkTrip_B01ID, 
 T1.NumStages, T1.MainMode_B03ID, T1.MainMode_B04ID, T1.MainMode_B11ID, T1.TripTotalTime, 
@@ -51,8 +53,6 @@ ORDER BY T3.HHoldGOR_B02ID '
 bl2014 <-sqldf(x=str_sql)
 names(bl2014)
 
-rm(day2014, household2014, ind2014, stage2014, trip2014)
-
 #add extra variables
 bl2014$Age = bl2014$Sex =NA
 bl2014$Age[bl2014$Age_B01ID<16] <- '16.59'
@@ -62,65 +62,58 @@ bl2014$Sex[bl2014$Sex_B01ID==2] <- 'Female'
 bl2014$agesex <- paste0(bl2014$Age,bl2014$Sex)
 
 
-################ CYCLABLE TRIPS  ##################
+############### TRIPS w. P.A.  (= trips w. WALKING/CYCLING stages)
 
-#generate cyclable trips  
-str_sql <- 'SELECT T1.SurveyYear, T1.TripID, T1.IndividualID, 
-            
-            T1.W5, T1.W5xHH, T1.SeriesCall_B01ID, T1.ShortWalkTrip_B01ID,
-            T1.NumStages, T1.MainMode_B03ID, T1.TripTotalTime, T1.TripTravTime,  
-            T1.TripDisIncSW, T1.TripDisExSW, T1.JJXSC, T1.JOTXSC, T1.JTTXSC, T1.JD, 
-            0 AS Cycl_Impossible,
-            T3.Age_B01ID, T3.Sex_B01ID, T3.NSSec_B03ID, T3.CarAccess_B01ID
-            
-            FROM (trip2014 as T1 INNER JOIN ind2014 as T3 ON T1.IndividualID = T3.IndividualID '
+str_sql <- 'SELECT T1.TripID, T2.StageID, T2.IndividualID, T2.StageDistance, 
+T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, 
+T2.StageShortWalk_B01ID, T2.SD, T2.STTXSC
 
-tripscyclable <-sqldf(x=str_sql)
+FROM (trip2014 AS T1 INNER JOIN stage2014 AS T2 ON T1.TripID = T2.TripID) 
 
-
-############### WALKED/CYCLED TRIPS  (= trips w. P.A. stages)
-
-str_sql <- 'SELECT T1.TripID, T2.StageID, T4.TravDay, T2.IndividualID, T2.StageSeq, T2.StageDistance, 
-T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, T2.StageMode_B11ID, 
-T2.StageShortWalk_B01ID, T2.W5, T2.W5xHH, T2.SSXSC, T2.STTXSC, T2.SD, 
-T3.Age_B01ID 
-
-FROM ((trip2014 AS T1 INNER JOIN stage2014 AS T2 ON T1.TripID = T2.TripID) 
-INNER JOIN ind2014 AS T3 ON T2.IndividualID = T3.IndividualID) 
-INNER JOIN day2014 AS T4 ON T2.DayID = T4.DayID
-
-WHERE (  T2.StageMode_B04ID IN (1,2)   )
+WHERE   T2.StageMode_B04ID =1   
 
 ORDER BY T1.TripID '
 
-tripswc <- sqldf(x=str_sql)
+walktrips <- sqldf(x=str_sql)
 
+str_sql <- 'SELECT T1.TripID, T2.StageID, T2.IndividualID, T2.StageDistance, 
+T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, 
+T2.StageShortWalk_B01ID, T2.SD, T2.STTXSC
 
-#####################  COMBINE: bl trips + W/C stages METs times:
+FROM (trip2014 AS T1 INNER JOIN stage2014 AS T2 ON T1.TripID = T2.TripID) 
 
-str_sql <- 'SELECT T1.SurveyYear, T1.TripID, T1.NumStages, 
-T1.IndividualID, T1.TravDay, T1.SeriesCall_B01ID, 
-T1.ShortWalkTrip_B01ID, T1.MainMode_B03ID, T1.TripTotalTime, 
-T1.TripDisIncSW, T1.TripDisExSW, T2.StageID, 
-T2.StageMode_B04ID, T2.StageDistance, T2.StageTime, 
-T2.W5, T2.W5xHH, T2.SSXSC, T2.STTXSC, 
-T2.SD
+WHERE   T2.StageMode_B04ID =2   
 
-FROM tripscyclable AS T1 LEFT JOIN tripswc AS T2 ON T1.TripID = T2.TripID
+ORDER BY T1.TripID '
 
-ORDER BY T1.SurveyYear, T1.NumStages DESC , T2.StageID '
+cycletrips <- sqldf(x=str_sql)
 
+###### calculate  TIMES/DISTANCES (for METs stages)
+str_sql <- 'SELECT T1.TripID, Sum(T1.StageDistance) AS SumofWStageDistance, 
+Sum(T1.StageTime) AS SumOfWStageTime
 
-wc <- sqldf(x=str_sql)    #cyclable trips w. walked stages added
+FROM walktrips AS T1 GROUP BY T1.TripID   '
 
+walktrips1 <- sqldf(x= str_sql)    # walked trips
 
-###### calculate  TIMES/DISTANCES (for METs stages) for main parameters
-str_sql <- 'SELECT wc.TripID, Sum(wc.StageDistance) AS SumofWStageDistance, 
-Sum(wc.StageTime) AS SumOfWStageTime, Sum(wc.STTXSC) AS SumOfSTTXSC, 
-Sum(wc.SD) AS SumOfSD
+str_sql <- 'SELECT T1.TripID, Sum(T1.StageDistance) AS SumofCStageDistance, 
+Sum(T1.StageTime) AS SumOfCStageTime
 
-FROM wc
-GROUP BY wc.TripID   '
+FROM cycletrips AS T1 GROUP BY T1.TripID   ' 
 
-wc <- sqldf(x= str_sql)
+cycletrips1 <- sqldf(x= str_sql)    # cycled trips
+
+rm(walktrips, cycletrips)
+
+#####################  COMBINE: bl trips <>     W/C stages METs times:
+
+bl2014 = left_join(bl2014, walktrips1, by="TripID")
+bl2014 = left_join(bl2014, cycletrips1, by="TripID")
+
+bl2014$SumofWStageDistance[is.na(bl2014$SumofWStageDistance)]=0
+bl2014$SumOfWStageTime[is.na(bl2014$SumOfWStageTime)]= 0
+
+bl2014$SumofCStageDistance[is.na(bl2014$SumofCStageDistance) ] = 0
+bl2014$SumOfCStageTime[is.na(bl2014$SumOfCStageTime) ] = 0
+
 
