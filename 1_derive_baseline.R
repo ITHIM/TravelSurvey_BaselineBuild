@@ -6,12 +6,14 @@ library(dplyr)
 
 ####################### STARTS BUILD PROCESS OF BASELINE ###############################
 
-# make files thinner for inner_join
+# make files thinner for inner_join 
 trip2014 <- trip2014[, c('SurveyYear', 'TripID', 'DayID', 'IndividualID', 'HouseholdID', 
                            'PSUID', 'W5', 'W5xHH', 'TravDay', 'SeriesCall_B01ID', 'ShortWalkTrip_B01ID', 
-                           'NumStages', 'MainMode_B03ID', 'MainMode_B04ID', 'MainMode_B11ID', 'TripTotalTime', 
-                           'TripTravTime', 'TripDisIncSW', 'TripDisExSW', 'JJXSC', 'JOTXSC', 'JTTXSC', 
-                           'JD')]
+                           'NumStages', 'MainMode_B03ID', 'MainMode_B04ID', 'MainMode_B11ID',
+                           'TripPurpose_B01ID', 'TripPurpose_B02ID', 
+                           'TripTotalTime', 'TripTravTime', 'TripDisIncSW', 'TripDisExSW',
+                           'JJXSC', 'JOTXSC', 'JTTXSC', 'JD')]
+
 ind2014 <- ind2014[   ,  c('IndividualID', 'Age_B01ID',  'Sex_B01ID', 'NSSec_B03ID',  'CarAccess_B01ID','HouseholdID',
                            'NSSec_B03ID', 'IndIncome2002_B02ID', 'EthGroupTS_B02ID' )]
 
@@ -116,4 +118,6 @@ bl2014$SumOfWStageTime[is.na(bl2014$SumOfWStageTime)]= 0
 bl2014$SumofCStageDistance[is.na(bl2014$SumofCStageDistance) ] = 0
 bl2014$SumOfCStageTime[is.na(bl2014$SumOfCStageTime) ] = 0
 
+
+################## MATCHING BASELINE <>  A.P.S.
 
