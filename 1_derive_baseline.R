@@ -14,7 +14,8 @@ trip2014 <- trip2014[, c('SurveyYear', 'TripID', 'DayID', 'IndividualID', 'House
                            'TripTotalTime', 'TripTravTime', 'TripDisIncSW', 'TripDisExSW',
                            'JJXSC', 'JOTXSC', 'JTTXSC', 'JD')]
 
-ind2014 <- ind2014[   ,  c('IndividualID', 'Age_B01ID',  'Sex_B01ID', 'NSSec_B03ID',  'CarAccess_B01ID','HouseholdID',
+ind2014 <- ind2014[   ,  c('IndividualID', "HouseholdID", 'Age_B01ID',  'Sex_B01ID', 'NSSec_B03ID',
+                           'CarAccess_B01ID',
                            'NSSec_B03ID', 'IndIncome2002_B02ID', 'EthGroupTS_B02ID' )]
 
 household2014  <- household2014[ ,c('HouseholdID', 'HHoldGOR_B02ID')]
@@ -33,9 +34,9 @@ stage2014 <- stage2014[ ,c('SurveyYear', 'StageID', 'TripID', 'DayID',
 # T2.W5, T2.W5xHH, T2.SSXSC, T2.STTXSC, T2.SD,    additional fields for extra precision
 
 
-#### Create initial baseline = no mMETs , filtered to >=18 y.o., English regions 1..9)
+#### Create INITIAL BASELINE  = no mMETs , filtered to >=18 y.o., English regions 1..9)
 
-#household2014$HHoldGOR_B02ID = as.character(household2014$HHoldGOR_B02ID)
+#household2014$HHoldGOR_B02ID  = as.character(household2014$HHoldGOR_B02ID)
 
 str_sql <- 'SELECT T2.Age_B01ID, T2.Sex_B01ID, T2.CarAccess_B01ID, T2.NSSec_B03ID, 
 T2.IndIncome2002_B02ID, T2.EthGroupTS_B02ID, 
@@ -45,46 +46,46 @@ T1.NumStages, T1.MainMode_B03ID, T1.MainMode_B04ID, T1.MainMode_B11ID, T1.TripTo
 T1.TripTravTime, T1.TripDisIncSW, T1.TripDisExSW, T1.JJXSC, T1.JOTXSC, T1.JTTXSC, 
 T1.JD, 0 AS Pcyc, 0 AS now_cycle, T3.HHoldGOR_B02ID 
 
-FROM (trip2014 as T1 INNER JOIN ind2014 as T2 ON T1.IndividualID = T2.IndividualID) 
-INNER JOIN household2014 as T3 ON T2.HouseholdID = T3.HouseholdID  
+FROM (trip2014 as T1 INNER JOIN ind2014 as T2 ON T1.IndividualID  = T2.IndividualID) 
+INNER JOIN household2014 as T3 ON T2.HouseholdID  = T3.HouseholdID  
 
 WHERE (((T2.Age_B01ID)>=8) AND ((T3.HHoldGOR_B02ID)<10))
 ORDER BY T3.HHoldGOR_B02ID '
 
 
-bl2014 <-sqldf(x=str_sql)
+bl2014 <-sqldf(x =str_sql)
 names(bl2014)
 
-#add extra variables
-bl2014$Age = bl2014$Sex =NA
-bl2014$Age[bl2014$Age_B01ID<16] <- '16.59'
-bl2014$Age[bl2014$Age_B01ID>=16] <- '60plus'
-bl2014$Sex[bl2014$Sex_B01ID==1] <- 'Male'
-bl2014$Sex[bl2014$Sex_B01ID==2] <- 'Female'
-bl2014$agesex <- paste0(bl2014$Age,bl2014$Sex)
+#add extra variables for scenarios build
+bl2014$Age  = bl2014$Sex  =NA
+bl2014$Age[bl2014$Age_B01ID< 16] <- '16.59'
+bl2014$Age[bl2014$Age_B01ID>= 16] <- '60plus'
+bl2014$Sex[bl2014$Sex_B01ID== 1] <- 'Male'
+bl2014$Sex[bl2014$Sex_B01ID== 2] <- 'Female'
+bl2014$agesex <- paste0(bl2014$Age, bl2014$Sex)
 
 
-############### TRIPS w. P.A.  (= trips w. WALKING/CYCLING stages)
+############### TRIPS w. P.A.  ( = trips w. WALKING/CYCLING stages)
 
 str_sql <- 'SELECT T1.TripID, T2.StageID, T2.IndividualID, T2.StageDistance, 
 T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, 
 T2.StageShortWalk_B01ID, T2.SD, T2.STTXSC
 
-FROM (trip2014 AS T1 INNER JOIN stage2014 AS T2 ON T1.TripID = T2.TripID) 
+FROM (trip2014 AS T1 INNER JOIN stage2014 AS T2 ON T1.TripID  = T2.TripID) 
 
-WHERE   T2.StageMode_B04ID =1   
+WHERE   T2.StageMode_B04ID= 1   
 
 ORDER BY T1.TripID '
 
-walktrips <- sqldf(x=str_sql)
+walktrips <- sqldf(x= str_sql)
 
 str_sql <- 'SELECT T1.TripID, T2.StageID, T2.IndividualID, T2.StageDistance, 
 T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, 
 T2.StageShortWalk_B01ID, T2.SD, T2.STTXSC
 
-FROM (trip2014 AS T1 INNER JOIN stage2014 AS T2 ON T1.TripID = T2.TripID) 
+FROM (trip2014 AS T1 INNER JOIN stage2014 AS T2 ON T1.TripID  = T2.TripID) 
 
-WHERE   T2.StageMode_B04ID =2   
+WHERE   T2.StageMode_B04ID  =2   
 
 ORDER BY T1.TripID '
 
@@ -109,29 +110,87 @@ rm(walktrips, cycletrips)
 
 #####################  COMBINE: bl trips <>     W/C stages METs times:
 
-bl2014 = left_join(bl2014, walktrips1, by="TripID")
-bl2014 = left_join(bl2014, cycletrips1, by="TripID")
+bl2014  = left_join(bl2014, walktrips1, by ="TripID")
+bl2014  = left_join(bl2014, cycletrips1, by ="TripID")
+rm(walktrips1, cycletrips1)
 
-bl2014$SumofWStageDistance[is.na(bl2014$SumofWStageDistance)]=0
-bl2014$SumOfWStageTime[is.na(bl2014$SumOfWStageTime)]= 0
+bl2014$SumofWStageDistance[is.na(bl2014$SumofWStageDistance)] =0
+bl2014$SumOfWStageTime[is.na(bl2014$SumOfWStageTime)] = 0
 
-bl2014$SumofCStageDistance[is.na(bl2014$SumofCStageDistance) ] = 0
-bl2014$SumOfCStageTime[is.na(bl2014$SumOfCStageTime) ] = 0
+bl2014$SumofCStageDistance[is.na(bl2014$SumofCStageDistance) ]  = 0
+bl2014$SumOfCStageTime[is.na(bl2014$SumOfCStageTime) ]  = 0
 
 
 ################## MATCHING BASELINE <>  A.P.S.
 
-datapath= './data/'
-aps = readRDS(paste0(datapath,'aps_proc.Rds')) #altern: aps = read.dta13(paste0(datapath,'active_people_survey_5-9_readyCamb.dta'))
+datapath = './data/'
+aps  = readRDS(paste0(datapath,'aps_proc.Rds')) #altern: aps  = read.dta13(paste0(datapath,'active_people_survey_5-9_readyCamb.dta'))
 
-#recode region-sex-age bands -
-aps$region = recode(.x = aps$region,  "East"= 6, "East Midlands"= 4, "London"= 7, 
-                    "North East"= 1, "North West"=2, "South East"= 8, "South West"= 9,
-                    "West Midlands"= 5, "Yorkshire"= 3)
+#recode region-sex-age bands - walk duration
+aps$region  = recode(.x  = aps$region,  "East" = 6, "East Midlands" = 4, "London" = 7, 
+                    "North East" = 1, "North West" =2, "South East" = 8, "South West" = 9,
+                    "West Midlands" = 5, "Yorkshire" = 3)
 
 
-aps$male = recode(aps$male, '1'=1, '0'=2)
-#   aps$age= cut()
-#   aps$dur_walk10_utility_wk = cut()
-#   aps$days_cycle_all_4wk = cut()   
+# categs. as in NTS: 1 =male, 2 =female
+aps$male  = recode(aps$male, '1' =1, '0' =2)
+
+#NTS baseline criteria: 18y.o or older
+aps  = aps[aps$age>17, ]
+
+aps$agetest <- cut(aps$age, breaks  = c(18:20, 21, 26, 30, 40, 50, 60, 65, 70, 75, 80, 85, Inf),
+labels  = c(8:21), right  = F)
+
+#recode duration of walking for 10+ min bouts
+aps$bin.dur_walk10_utility_wk  = cut(aps$dur_walk10_utility_wk, breaks  = c(0, 1, 3, 6, Inf), 
+                                labels =c(0:3), right = F)
+
+aps$bin.days_cycle_all_4wk  = 0
+sel = (aps$days_cycle_all_4wk >0) 
+aps$bin.days_cycle_all_4wk [ sel ]  = 1
+
+### MATCHING APS <> baseline individuals 
+###     initially on 5 variables: age-sex-region-walking-cycling - [SES]
+
+# group bl2014
+str_sql='select IndividualID, sum(SumOfWStageTime) as WalkTime,
+                              sum(SumOfCStageTime) as CycleTime
+                             from bl2014 group by individualID '
+
+indiv.MET = sqldf(str_sql)
+
+#add WC indicators and derive target vars
+selcols  = c("IndividualID", "Age_B01ID", "Sex_B01ID", "NSSec_B03ID", "EthGroupTS_B02ID", 
+             "HHoldGOR_B02ID", "SumofWStageDistance", "SumOfWStageTime",
+             "SumofCStageDistance", "SumOfCStageTime")
+
+indiv.MET  = group_by(bl2014[, selcols], "IndividualID" )
+
+#selcols = c("IndividualID", "Age_B01ID","Sex_B01ID", "NSSec_B03ID", "EthGroupTS_B02ID")
+indiv.MET  = inner_join(indiv.MET, ind2014, by ="IndividualID")
+indiv.MET  = group_by(.data  = indiv.MET, "IndividualID" )
+
+selcols  =c("id","region","la" ,"male", "age", "ageband", 
+            "nonwhite","numcars", "educcat", "days_walk10_all_4wk",
+            "days_walk10_all_wk", "agetest","bin.dur_walk10_utility_wk",
+            "bin.days_cycle_all_4wk" )
+
+aps.sel  = aps[, selcols]
+
+str_sql  = "SELECT T2.IndividualID, T2.SumofWStageDistance, T2.SumOfWStageTime,
+           T2.SumofCStageDistance, T2.SumOfCStageTime 
+           FROM [aps.sel] AS T1 INNER JOIN [indiv.MET] AS T2
+           ON (T1.agetest = T2.Age_B01ID) 
+           AND (T1.male  = T2.Sex_B01ID) 
+           AND (T1.region = T2.HHoldGOR_B02ID) 
+           AND (T1.region = T2.HHoldGOR_B02ID)     "
+
+nts.aps.match  = sqldf(x =str_sql)
+
+# AND T1.bin.dur_walk_utility_wk  = 
+# T1.nonwhite =T2.EthGroupTS_B02ID (for future match)
+
+
+
+
 
