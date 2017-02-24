@@ -121,3 +121,17 @@ bl2014$SumOfCStageTime[is.na(bl2014$SumOfCStageTime) ] = 0
 
 ################## MATCHING BASELINE <>  A.P.S.
 
+datapath= './data/'
+aps = readRDS(paste0(datapath,'aps_proc.Rds')) #altern: aps = read.dta13(paste0(datapath,'active_people_survey_5-9_readyCamb.dta'))
+
+#recode region-sex-age bands -
+aps$region = recode(.x = aps$region,  "East"= 6, "East Midlands"= 4, "London"= 7, 
+                    "North East"= 1, "North West"=2, "South East"= 8, "South West"= 9,
+                    "West Midlands"= 5, "Yorkshire"= 3)
+
+
+aps$male = recode(aps$male, '1'=1, '0'=2)
+#   aps$age= cut()
+#   aps$dur_walk10_utility_wk = cut()
+#   aps$days_cycle_all_4wk = cut()   
+
