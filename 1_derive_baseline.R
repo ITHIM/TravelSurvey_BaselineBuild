@@ -14,8 +14,8 @@ trip2014 <- trip2014[, c('SurveyYear', 'TripID', 'DayID', 'IndividualID', 'House
                            'TripTotalTime', 'TripTravTime', 'TripDisIncSW', 'TripDisExSW',
                            'JJXSC', 'JOTXSC', 'JTTXSC', 'JD')]
 
-ind2014 <- ind2014[   ,  c('IndividualID', "HouseholdID", 'Age_B01ID',  'Sex_B01ID', 'NSSec_B03ID',
-                           'CarAccess_B01ID',
+ind2014 <- ind2014[   ,  c('IndividualID', 'Age_B01ID',  'Sex_B01ID', 'NSSec_B03ID',
+                           'CarAccess_B01ID', 'BicycleFreq_B01ID', 'WalkFreq_B01ID', 'Cycle12_B01ID',
                            'NSSec_B03ID', 'IndIncome2002_B02ID', 'EthGroupTS_B02ID' )]
 
 household2014  <- household2014[ ,c('HouseholdID', 'HHoldGOR_B02ID')]
@@ -108,13 +108,13 @@ cycletrips1 <- sqldf(x= str_sql)    # cycled trips
 
 rm(walktrips, cycletrips)
 
-#####################  COMBINE: bl trips <>     W/C stages METs times:
+#####################  COMBINE: bl trips <>  W/C stages METs times:
 
 bl2014  = left_join(bl2014, walktrips1, by ="TripID")
 bl2014  = left_join(bl2014, cycletrips1, by ="TripID")
 rm(walktrips1, cycletrips1)
 
-bl2014$SumofWStageDistance[is.na(bl2014$SumofWStageDistance)] =0
+bl2014$SumofWStageDistance[is.na(bl2014$SumofWStageDistance)] = 0
 bl2014$SumOfWStageTime[is.na(bl2014$SumOfWStageTime)] = 0
 
 bl2014$SumofCStageDistance[is.na(bl2014$SumofCStageDistance) ]  = 0
@@ -124,7 +124,8 @@ bl2014$SumOfCStageTime[is.na(bl2014$SumOfCStageTime) ]  = 0
 ################## MATCHING BASELINE <>  A.P.S.
 
 datapath = './data/'
-aps  = readRDS(paste0(datapath,'aps_proc.Rds')) #altern: aps  = read.dta13(paste0(datapath,'active_people_survey_5-9_readyCamb.dta'))
+aps  = readRDS(paste0(datapath,'aps_proc.Rds')) #latest ****_v3 file from Anna
+aps$region = as.character(aps$region)
 
 #recode region-sex-age bands - walk duration
 aps$region  = recode(.x  = aps$region,  "East" = 6, "East Midlands" = 4, "London" = 7, 
@@ -138,52 +139,70 @@ aps$male  = recode(aps$male, '1' =1, '0' =2)
 #NTS baseline criteria: 18y.o or older
 aps  = aps[aps$age>17, ]
 
-aps$agetest <- cut(aps$age, breaks  = c(18:20, 21, 26, 30, 40, 50, 60, 65, 70, 75, 80, 85, Inf),
+aps$ageband <- cut(aps$age, breaks  = c(18:20, 21, 26, 30, 40, 50, 60, 65, 70, 75, 80, 85, Inf),
 labels  = c(8:21), right  = F)
 
 #recode duration of walking for 10+ min bouts
+aps$dur_walk10_utility_wk[is.na(aps$dur_walk10_utility_wk)] = 0
 aps$bin.dur_walk10_utility_wk  = cut(aps$dur_walk10_utility_wk, breaks  = c(0, 1, 3, 6, Inf), 
                                 labels =c(0:3), right = F)
 
-aps$bin.days_cycle_all_4wk  = 0
-sel = (aps$days_cycle_all_4wk >0) 
-aps$bin.days_cycle_all_4wk [ sel ]  = 1
+#binary variable for total cycling
+aps$bin.days_cycle_all_wk  = 0
+sel = (aps$days_cycle_all_wk >0) 
+aps$bin.days_cycle_all_wk [ sel ]  = 1
+
+# impute cycling in ind2014
+ind2014$BicycleFreq_B01ID = recode(ind2014$BicycleFreq_B01ID, '-10'= 0, '-9'= 0, '-8'= 0,
+                                   '1'= 1, '2'=1, '3'= 0, '4'= 0, '5'= 0, '6'= 0, '7'= 0)
+
+sel = ( ind2014$Cycle12_B01ID== 2 | ind2014$Cycle12_B01ID== 3)
+ind2014$BicycleFreq_B01ID[ sel ] = 0
+
 
 ### MATCHING APS <> baseline individuals 
-###     initially on 5 variables: age-sex-region-walking-cycling - [SES]
+###     initially on 6 variables: age-sex-region-ethnicity-walking-cycling - [SES]
 
 # group bl2014
-str_sql='select IndividualID, sum(SumOfWStageTime) as WalkTime,
+str_sql='select IndividualID, HouseholdID, sum(SumOfWStageTime) as WalkTime,
                               sum(SumOfCStageTime) as CycleTime
                              from bl2014 group by individualID '
 
 indiv.MET = sqldf(str_sql)
+indiv.MET$WalkTime.h = round(indiv.MET$WalkTime/60, digits = 1)
+indiv.MET$CycleTime.h = round(indiv.MET$CycleTime/60, digits = 1)
 
-#add WC indicators and derive target vars
-selcols  = c("IndividualID", "Age_B01ID", "Sex_B01ID", "NSSec_B03ID", "EthGroupTS_B02ID", 
-             "HHoldGOR_B02ID", "SumofWStageDistance", "SumOfWStageTime",
-             "SumofCStageDistance", "SumOfCStageTime")
+indiv.MET$bin.WalkTime.h = cut(x = indiv.MET$WalkTime.h, breaks  = c(0, 1, 3, 6, Inf),
+                               labels = c(0:3), right = F)
 
-indiv.MET  = group_by(bl2014[, selcols], "IndividualID" )
+#add region for matching
+indiv.MET = inner_join(indiv.MET, household2014, by="HouseholdID")
 
-#selcols = c("IndividualID", "Age_B01ID","Sex_B01ID", "NSSec_B03ID", "EthGroupTS_B02ID")
 indiv.MET  = inner_join(indiv.MET, ind2014, by ="IndividualID")
-indiv.MET  = group_by(.data  = indiv.MET, "IndividualID" )
 
-selcols  =c("id","region","la" ,"male", "age", "ageband", 
-            "nonwhite","numcars", "educcat", "days_walk10_all_4wk",
-            "days_walk10_all_wk", "agetest","bin.dur_walk10_utility_wk",
-            "bin.days_cycle_all_4wk" )
+# selcols  =c("id", "survey_year", "region", "la" ,"male", "age", "ageband", "sec1r", "sec3r",
+#             "nonwhite", "numcars", "educcat", "days_walk10_all_4wk",
+#             "days_walk10_all_wk", "agetest","bin.dur_walk10_utility_wk",
+#             "bin.days_cycle_all_4wk" )
+
+selcols  =c("id", "survey_year", "region", "la" ,"male", "age", "ageband", "sec1r", "sec3r",
+            "nonwhite", "dur_walk10_healthrec_wk", "days_walk10_utility_wk",
+            "days_cycle_all_wk", "dur_cycle_rec_wk", "bin.dur_walk10_utility_wk",
+            "bin.days_cycle_all_wk")
 
 aps.sel  = aps[, selcols]
 
-str_sql  = "SELECT T2.IndividualID, T2.SumofWStageDistance, T2.SumOfWStageTime,
-           T2.SumofCStageDistance, T2.SumOfCStageTime 
+str_sql  = "SELECT T1.id, T2.IndividualID, T2.WalkTime,
+           T2.CycleTime 
            FROM [aps.sel] AS T1 INNER JOIN [indiv.MET] AS T2
-           ON (T1.agetest = T2.Age_B01ID) 
+           ON (T1.ageband = T2.Age_B01ID) 
            AND (T1.male  = T2.Sex_B01ID) 
            AND (T1.region = T2.HHoldGOR_B02ID) 
-           AND (T1.region = T2.HHoldGOR_B02ID)     "
+           AND (T1.nonwhite = T2.EthGroupTS_B02ID)  
+           AND (T1.[bin.dur_walk10_utility_wk] =  T2.[bin.WalkTime.h]  ) 
+           AND (T1.[bin.days_cycle_all_wk] = T2.[BicycleFreq_B01ID]  ) "
+
+                #    APS variables   <>  NTS variables
 
 nts.aps.match  = sqldf(x =str_sql)
 
