@@ -15,14 +15,14 @@ ficheros <-  dir(path = datapath,  pattern = '.tab')
 
 #days the trips were made
 day2014 <- read.table(file.path(datapath,  "day.tab"),  sep = "\t",  header = T)
-colnames(day2014)
-dim(day2014)
 day2014 <- subset(day2014, subset = SurveyYear>=2004)  #include years 2004-2014
 
 
 #individuals making the trips
 ind2014<- read.table(file.path(datapath,  "individual.tab"),  sep = "\t",  header = T)
 ind2014<- subset(ind2014, SurveyYear >= 2004)
+
+ind2014<- subset(ind2014, Age_B01ID >= 8)    #  >18y.o   -> 177K people
 
 #stages per trip
 stage2014<- read.table(file.path(datapath, "stage.tab"),  sep = "\t",  header = T) 
@@ -37,12 +37,4 @@ household2014 <- subset(household2014, SurveyYear >= 2004)
 trip2014 <- read.table(file.path(datapath, "trip.tab"),  header = T,   sep = "\t", colClasses=c(rep("numeric", 63)))
 trip2014<- subset(trip2014, SurveyYear >= 2004)
 
-#vehicle
-# vehicle2014 <- read.table(file.path(datapath, "vehicle.tab"),  header = T, sep = "\t")
-# vehicle2014 <-  subset(vehicle2014, SurveyYear >= 2004)
 
-
-#########################    FILTERING PROCESS: 
-
-#subset to individuals >18y.o
-ind2014<- subset(ind2014, Age_B01ID >= 8)

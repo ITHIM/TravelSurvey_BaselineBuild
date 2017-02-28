@@ -15,14 +15,14 @@ trip2014 <- trip2014[, c('SurveyYear', 'TripID', 'DayID', 'IndividualID', 'House
                            'JJXSC', 'JOTXSC', 'JTTXSC', 'JD')]
 
 ind2014 <- ind2014[   ,  c('IndividualID', 'Age_B01ID',  'Sex_B01ID', 'NSSec_B03ID',
-                           'CarAccess_B01ID', 'BicycleFreq_B01ID', 'WalkFreq_B01ID', 'Cycle12_B01ID',
-                           'NSSec_B03ID', 'IndIncome2002_B02ID', 'EthGroupTS_B02ID' )]
+                           'CarAccess_B01ID', 'BicycleFreq_B01ID', 'WalkFreq_B01ID',
+                           'Cycle12_B01ID', 'NSSec_B03ID', 'IndIncome2002_B02ID',
+                           'EthGroupTS_B02ID' )]
 
 household2014  <- household2014[ ,c('HouseholdID', 'HHoldGOR_B02ID')]
 
 
 # filter days/stages
-#day2014 <-  day2014[ ,]
 stage2014 <- stage2014[ ,c('SurveyYear', 'StageID', 'TripID', 'DayID', 
                            'IndividualID', 'HouseholdID', 'PSUID', 'VehicleID', 'StageShortWalk_B01ID',
                            'IndTicketID', 'PersNo', 'TravDay', 'JourSeq', 'StageMode_B03ID',
@@ -36,8 +36,6 @@ stage2014 <- stage2014[ ,c('SurveyYear', 'StageID', 'TripID', 'DayID',
 
 #### Create INITIAL BASELINE  = no mMETs , filtered to >=18 y.o., English regions 1..9)
 
-#household2014$HHoldGOR_B02ID  = as.character(household2014$HHoldGOR_B02ID)
-
 str_sql <- 'SELECT T2.Age_B01ID, T2.Sex_B01ID, T2.CarAccess_B01ID, T2.NSSec_B03ID, 
 T2.IndIncome2002_B02ID, T2.EthGroupTS_B02ID, 
 T1.SurveyYear, T1.TripID, T1.DayID, T1.IndividualID, T1.HouseholdID, 
@@ -47,7 +45,7 @@ T1.TripTravTime, T1.TripDisIncSW, T1.TripDisExSW, T1.JJXSC, T1.JOTXSC, T1.JTTXSC
 T1.JD, 0 AS Pcyc, 0 AS now_cycle, T3.HHoldGOR_B02ID 
 
 FROM (trip2014 as T1 INNER JOIN ind2014 as T2 ON T1.IndividualID  = T2.IndividualID) 
-INNER JOIN household2014 as T3 ON T2.HouseholdID  = T3.HouseholdID  
+INNER JOIN household2014 as T3 ON T1.HouseholdID  = T3.HouseholdID  
 
 WHERE (((T2.Age_B01ID)>=8) AND ((T3.HHoldGOR_B02ID)<10))
 ORDER BY T3.HHoldGOR_B02ID '
@@ -67,31 +65,33 @@ bl2014$agesex <- paste0(bl2014$Age, bl2014$Sex)
 
 ############### TRIPS w. P.A.  ( = trips w. WALKING/CYCLING stages)
 
-str_sql <- 'SELECT T1.TripID, T2.StageID, T2.IndividualID, T2.StageDistance, 
+## WALKING:  stages time/distance, as per agreed rules 
+str_sql <- 'SELECT T1.TripID, T1.TripPurpose_B01ID, T2.StageID, T2.IndividualID, T2.StageDistance, 
 T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, 
 T2.StageShortWalk_B01ID, T2.SD, T2.STTXSC
 
 FROM (trip2014 AS T1 INNER JOIN stage2014 AS T2 ON T1.TripID  = T2.TripID) 
 
-WHERE   T2.StageMode_B04ID= 1   
+WHERE   (T1.TripPurpose_B01ID<>17 AND T2.StageMode_B04ID= 1  AND T2.StageTime > 10 )
 
 ORDER BY T1.TripID '
 
 walktrips <- sqldf(x= str_sql)
 
+## CYCLING:  stages time/distance 
 str_sql <- 'SELECT T1.TripID, T2.StageID, T2.IndividualID, T2.StageDistance, 
 T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, 
 T2.StageShortWalk_B01ID, T2.SD, T2.STTXSC
 
 FROM (trip2014 AS T1 INNER JOIN stage2014 AS T2 ON T1.TripID  = T2.TripID) 
 
-WHERE   T2.StageMode_B04ID  =2   
+WHERE   T2.StageMode_B04ID  =2 
 
 ORDER BY T1.TripID '
 
 cycletrips <- sqldf(x=str_sql)
 
-###### calculate  TIMES/DISTANCES (for METs stages)
+###### calculate total TIMES/DISTANCES per trip (for METs stages)
 str_sql <- 'SELECT T1.TripID, Sum(T1.StageDistance) AS SumofWStageDistance, 
 Sum(T1.StageTime) AS SumOfWStageTime
 
@@ -108,7 +108,7 @@ cycletrips1 <- sqldf(x= str_sql)    # cycled trips
 
 rm(walktrips, cycletrips)
 
-#####################  COMBINE: bl trips <>  W/C stages METs times:
+#####################  COMBINE: add W/C stages METs times to bl trips
 
 bl2014  = left_join(bl2014, walktrips1, by ="TripID")
 bl2014  = left_join(bl2014, cycletrips1, by ="TripID")
@@ -124,7 +124,7 @@ bl2014$SumOfCStageTime[is.na(bl2014$SumOfCStageTime) ]  = 0
 ################## MATCHING BASELINE <>  A.P.S.
 
 datapath = './data/'
-aps  = readRDS(paste0(datapath,'aps_proc.Rds')) #latest ****_v3 file from Anna
+aps  = readRDS(paste0(datapath,'aps_proc.Rds')) #latest v3 file from Anna
 aps$region = as.character(aps$region)
 
 #recode region-sex-age bands - walk duration
@@ -149,7 +149,7 @@ aps$bin.dur_walk10_utility_wk  = cut(aps$dur_walk10_utility_wk, breaks  = c(0, 1
 
 #binary variable for total cycling
 aps$bin.days_cycle_all_wk  = 0
-sel = (aps$days_cycle_all_wk >0) 
+sel = (aps$days_cycle_all_wk > 0.75) 
 aps$bin.days_cycle_all_wk [ sel ]  = 1
 
 # impute cycling in ind2014
@@ -166,27 +166,22 @@ ind2014$BicycleFreq_B01ID[ sel ] = 0
 # group bl2014
 str_sql='select IndividualID, HouseholdID, sum(SumOfWStageTime) as WalkTime,
                               sum(SumOfCStageTime) as CycleTime
-                             from bl2014 group by individualID '
+                             from bl2014 GROUP BY individualID '
 
-indiv.MET = sqldf(str_sql)
+indiv.MET = sqldf(str_sql)      # 135K people w trips, 42,441 w/o
 indiv.MET$WalkTime.h = round(indiv.MET$WalkTime/60, digits = 1)
 indiv.MET$CycleTime.h = round(indiv.MET$CycleTime/60, digits = 1)
 
 indiv.MET$bin.WalkTime.h = cut(x = indiv.MET$WalkTime.h, breaks  = c(0, 1, 3, 6, Inf),
                                labels = c(0:3), right = F)
 
-#add region for matching
+#add region & rest of vars for matching
 indiv.MET = inner_join(indiv.MET, household2014, by="HouseholdID")
-
 indiv.MET  = inner_join(indiv.MET, ind2014, by ="IndividualID")
 
-# selcols  =c("id", "survey_year", "region", "la" ,"male", "age", "ageband", "sec1r", "sec3r",
-#             "nonwhite", "numcars", "educcat", "days_walk10_all_4wk",
-#             "days_walk10_all_wk", "agetest","bin.dur_walk10_utility_wk",
-#             "bin.days_cycle_all_4wk" )
-
-selcols=c("id", "survey_year",
-          "region", "la",  "male", "age",  "nonwhite",                 
+#available columns in APS (last file provided)
+selcols=c("id", "survey_year", "region", "la",
+          "male", "age",  "nonwhite", "weightla_truepop", 
           "sec1r", "sec3r",  "dur_walk10_healthrec_wk",  
           "dur_walk10_utility_wk",     "days_cycle_all_wk",         "dur_cycle_rec_wk",         
           "mets_sport_wk",             "bin.dur_walk10_utility_wk", "bin.days_cycle_all_wk",    
@@ -194,9 +189,12 @@ selcols=c("id", "survey_year",
 
 aps.sel  = aps[, selcols]
 
-str_sql  = "SELECT T1.id, T2.IndividualID, T2.WalkTime,
-           T2.CycleTime 
+
+#match 6 vars
+str_sql  = "SELECT T1.id, T2.IndividualID, T2.WalkTime, T2.CycleTime 
+
            FROM [aps.sel] AS T1 INNER JOIN [indiv.MET] AS T2
+
            ON (T1.ageband = T2.Age_B01ID) 
            AND (T1.male  = T2.Sex_B01ID) 
            AND (T1.region = T2.HHoldGOR_B02ID) 
@@ -207,11 +205,30 @@ str_sql  = "SELECT T1.id, T2.IndividualID, T2.WalkTime,
                 #    APS variables   <>  NTS variables
 
 nts.aps.match  = sqldf(x =str_sql)
+sum(!indiv.MET$IndividualID %in% nts.aps.match$IndividualID)
+## individuals with/w.o match: 120,738 matched, 14,262 unmatched  
 
-# AND T1.bin.dur_walk_utility_wk  = 
-# T1.nonwhite =T2.EthGroupTS_B02ID (for future match)
+# rest: match 4 vars
+indiv.MET1 = indiv.MET [! indiv.MET$IndividualID %in% nts.aps.match$IndividualID,  ]
+str_sql1  = "SELECT T1.id, T2.IndividualID, T2.WalkTime, T2.CycleTime 
 
+           FROM [aps.sel] AS T1 INNER JOIN [indiv.MET1] AS T2
 
+           ON (T1.ageband = T2.Age_B01ID) 
+           AND (T1.male  = T2.Sex_B01ID) 
+           AND (T1.region = T2.HHoldGOR_B02ID) 
+
+           AND (T1.[bin.dur_walk10_utility_wk] =  T2.[bin.WalkTime.h]  ) "
+
+#    APS variables   <>  NTS variables
+
+nts.aps.match1  = sqldf(x =str_sql1)
+sum(!indiv.MET1$IndividualID %in% nts.aps.match1$IndividualID)  # =0 => ALL MATCHED
+
+#####################
+
+nts.aps = rbind(nts.aps.match, nts.aps.match1) ; rm(nts.aps.match, nts.aps.match1)
+saveRDS(object = nts.aps, file.path(datapath, 'nts.aps.Rds'))
 
 
 
