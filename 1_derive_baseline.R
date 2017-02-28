@@ -161,7 +161,7 @@ ind2014$BicycleFreq_B01ID[ sel ] = 0
 
 
 ### MATCHING APS <> baseline individuals 
-###     initially on 6 variables: age-sex-region-ethnicity-walking-cycling - [SES]
+### initially on 6 [7] variables: age-sex-region-ethnicity-walking-cycling - [SES]
 
 # group bl2014
 str_sql='select IndividualID, HouseholdID, sum(SumOfWStageTime) as WalkTime,
@@ -223,11 +223,14 @@ str_sql1  = "SELECT T1.id, T2.IndividualID, T2.WalkTime, T2.CycleTime
 #    APS variables   <>  NTS variables
 
 nts.aps.match1  = sqldf(x =str_sql1)
-sum(!indiv.MET1$IndividualID %in% nts.aps.match1$IndividualID)  # =0 => ALL MATCHED
+sum(!indiv.MET1$IndividualID %in% nts.aps.match1$IndividualID)  # =0 => ALL MATCHED !!
 
 #####################
 
 nts.aps = rbind(nts.aps.match, nts.aps.match1) ; rm(nts.aps.match, nts.aps.match1)
+
+#samples 1 individual per match
+nts.aps <- setDT(nts.aps)[,if(.N<1) .SD else .SD[sample(.N,1,replace=F)],by=IndividualID]
 saveRDS(object = nts.aps, file.path(datapath, 'nts.aps.Rds'))
 
 
