@@ -185,10 +185,12 @@ indiv.MET  = inner_join(indiv.MET, ind2014, by ="IndividualID")
 #             "days_walk10_all_wk", "agetest","bin.dur_walk10_utility_wk",
 #             "bin.days_cycle_all_4wk" )
 
-selcols  =c("id", "survey_year", "region", "la" ,"male", "age", "ageband", "sec1r", "sec3r",
-            "nonwhite", "dur_walk10_healthrec_wk", "days_walk10_utility_wk",
-            "days_cycle_all_wk", "dur_cycle_rec_wk", "bin.dur_walk10_utility_wk",
-            "bin.days_cycle_all_wk")
+selcols=c("id", "survey_year",
+          "region", "la",  "male", "age",  "nonwhite",                 
+          "sec1r", "sec3r",  "dur_walk10_healthrec_wk",  
+          "dur_walk10_utility_wk",     "days_cycle_all_wk",         "dur_cycle_rec_wk",         
+          "mets_sport_wk",             "bin.dur_walk10_utility_wk", "bin.days_cycle_all_wk",    
+          "ageband"   )
 
 aps.sel  = aps[, selcols]
 
