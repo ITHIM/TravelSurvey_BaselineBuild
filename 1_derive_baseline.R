@@ -2,7 +2,7 @@
 #prepare for SQL processing
 library(sqldf)
 library(dplyr)
-
+library(data.table)
 
 ####################### STARTS BUILD PROCESS OF BASELINE ###############################
 
@@ -191,7 +191,8 @@ aps.sel  = aps[, selcols]
 
 
 #match 6 vars
-str_sql  = "SELECT T1.id, T2.IndividualID, T2.WalkTime, T2.CycleTime 
+str_sql  = "SELECT T1.id, T1.weightla_truepop,
+            T2.IndividualID, T2.WalkTime, T2.CycleTime
 
            FROM [aps.sel] AS T1 INNER JOIN [indiv.MET] AS T2
 
@@ -210,7 +211,8 @@ sum(!indiv.MET$IndividualID %in% nts.aps.match$IndividualID)
 
 # rest: match 4 vars
 indiv.MET1 = indiv.MET [! indiv.MET$IndividualID %in% nts.aps.match$IndividualID,  ]
-str_sql1  = "SELECT T1.id, T2.IndividualID, T2.WalkTime, T2.CycleTime 
+str_sql1  = "SELECT T1.id, T1.weightla_truepop, 
+            T2.IndividualID, T2.WalkTime, T2.CycleTime 
 
            FROM [aps.sel] AS T1 INNER JOIN [indiv.MET1] AS T2
 
@@ -229,9 +231,9 @@ sum(!indiv.MET1$IndividualID %in% nts.aps.match1$IndividualID)  # =0 => ALL MATC
 
 nts.aps = rbind(nts.aps.match, nts.aps.match1) ; rm(nts.aps.match, nts.aps.match1)
 
-#samples 1 individual per match
-nts.aps <- setDT(nts.aps)[,if(.N<1) .SD else .SD[sample(.N,1,replace=F)],by=IndividualID]
+#samples 1 individual per match, probabilistic extraction
+nts.aps <- setDT(nts.aps)[,if(.N<1) .SD 
+                          else .SD[sample(.N,1,replace=F,prob = weightla_truepop)], by=IndividualID]
 saveRDS(object = nts.aps, file.path(datapath, 'nts.aps.Rds'))
-
 
 
