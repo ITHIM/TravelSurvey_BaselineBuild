@@ -63,9 +63,10 @@ bl2014$Sex[bl2014$Sex_B01ID== 2] <- 'Female'
 bl2014$agesex <- paste0(bl2014$Age, bl2014$Sex)
 
 
-############### TRIPS w. P.A.  ( = trips w. WALKING/CYCLING stages)
+########        CALCULATE TOTAL P.A. = NTS  + APS recreational  (WALKING + CYCLING)
 
-## WALKING:  stages time/distance, as per agreed rules 
+## 1: NTS WALKING:  stages time/distance, as per agreed rules 
+
 str_sql <- 'SELECT T1.TripID, T1.TripPurpose_B01ID, T2.StageID, T2.IndividualID, T2.StageDistance, 
 T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, 
 T2.StageShortWalk_B01ID, T2.SD, T2.STTXSC
@@ -78,7 +79,9 @@ ORDER BY T1.TripID '
 
 walktrips <- sqldf(x= str_sql)
 
-## CYCLING:  stages time/distance 
+
+## 2: NTS CYCLING:  stages time/distance 
+
 str_sql <- 'SELECT T1.TripID, T2.StageID, T2.IndividualID, T2.StageDistance, 
 T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, 
 T2.StageShortWalk_B01ID, T2.SD, T2.STTXSC
@@ -91,7 +94,7 @@ ORDER BY T1.TripID '
 
 cycletrips <- sqldf(x=str_sql)
 
-###### calculate total TIMES/DISTANCES per trip (for METs stages)
+###### calculate NTS TIMES/DISTANCES per trip (NTS)
 str_sql <- 'SELECT T1.TripID, Sum(T1.StageDistance) AS SumofWStageDistance, 
 Sum(T1.StageTime) AS SumOfWStageTime
 
@@ -108,7 +111,7 @@ cycletrips1 <- sqldf(x= str_sql)    # cycled trips
 
 rm(walktrips, cycletrips)
 
-#####################  COMBINE: add W/C stages METs times to bl trips
+#####################  COMBINE: add W/C stages METs times to bl trips (NTS)
 
 bl2014  = left_join(bl2014, walktrips1, by ="TripID")
 bl2014  = left_join(bl2014, cycletrips1, by ="TripID")
@@ -179,19 +182,9 @@ indiv.MET$bin.WalkTime.h = cut(x = indiv.MET$WalkTime.h, breaks  = c(0, 1, 3, 6,
 indiv.MET = inner_join(indiv.MET, household2014, by="HouseholdID")
 indiv.MET  = inner_join(indiv.MET, ind2014, by ="IndividualID")
 
-#available columns in APS (last file provided)
-selcols=c("id", "survey_year", "region", "la",
-          "male", "age",  "nonwhite", "weightla_truepop", 
-          "sec1r", "sec3r",  "dur_walk10_healthrec_wk",  
-          "dur_walk10_utility_wk",     "days_cycle_all_wk",         "dur_cycle_rec_wk",         
-          "mets_sport_wk",             "bin.dur_walk10_utility_wk", "bin.days_cycle_all_wk",    
-          "ageband"   )
-
-aps.sel  = aps[, selcols]
-
-
 #match 6 vars
-str_sql  = "SELECT T1.id, T1.weightla_truepop,
+str_sql  = "SELECT T1.id, T1.weightla_truepop, T1.mets_sport_wk,
+            (T1.dur_walk10_healthrec_wk/2) AS walkAPS, T1.dur_cycle_rec_wk AS cycleAPS,
             T2.IndividualID, T2.WalkTime, T2.CycleTime
 
            FROM [aps.sel] AS T1 INNER JOIN [indiv.MET] AS T2
@@ -211,7 +204,8 @@ sum(!indiv.MET$IndividualID %in% nts.aps.match$IndividualID)
 
 # rest: match 4 vars
 indiv.MET1 = indiv.MET [! indiv.MET$IndividualID %in% nts.aps.match$IndividualID,  ]
-str_sql1  = "SELECT T1.id, T1.weightla_truepop, 
+str_sql1  = "SELECT T1.id, T1.weightla_truepop, T1.mets_sport_wk,
+            (T1.dur_walk10_healthrec_wk/2) AS walkAPS, T1.dur_cycle_rec_wk AS cycleAPS,
             T2.IndividualID, T2.WalkTime, T2.CycleTime 
 
            FROM [aps.sel] AS T1 INNER JOIN [indiv.MET1] AS T2
@@ -233,7 +227,9 @@ nts.aps = rbind(nts.aps.match, nts.aps.match1) ; rm(nts.aps.match, nts.aps.match
 
 #samples 1 individual per match, probabilistic extraction
 nts.aps <- setDT(nts.aps)[,if(.N<1) .SD 
-                          else .SD[sample(.N,1,replace=F,prob = weightla_truepop)], by=IndividualID]
+                          else .SD[sample(.N,1,replace=F, prob = weightla_truepop)], by=IndividualID]
+
+
 saveRDS(object = nts.aps, file.path(datapath, 'nts.aps.Rds'))
 
 
