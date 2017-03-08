@@ -14,7 +14,7 @@ trip2014 <- trip2014[, c('SurveyYear', 'TripID', 'DayID', 'IndividualID', 'House
                            'TripTotalTime', 'TripTravTime', 'TripDisIncSW', 'TripDisExSW',
                            'JJXSC', 'JOTXSC', 'JTTXSC', 'JD')]
 
-ind2014 <- ind2014[   ,  c('IndividualID', 'HouseholdID', 'Age_B01ID',  'Sex_B01ID', 'NSSec_B03ID',
+ind2014 <- ind2014[   ,  c('IndividualID', 'HouseholdID', 'Age_B01ID',  'Sex_B01ID',
                            'CarAccess_B01ID', 'BicycleFreq_B01ID', 'WalkFreq_B01ID',
                            'Cycle12_B01ID', 'NSSec_B03ID', 'IndIncome2002_B02ID',
                            'EthGroupTS_B02ID' )]
@@ -36,6 +36,16 @@ stage2014 <- stage2014[ ,c('SurveyYear', 'StageID', 'TripID', 'DayID',
 
 #### Create INITIAL BASELINE  = no mMETs , filtered to >=18 y.o., English regions 1..9)
 
+# multiply short walks x6, then add to trips
+# df <- trip2014[trip2014$MainMode_B03ID==1,]
+# shortwalks <- data.frame()
+# 
+# for (i in 1:6) { shortwalks <- rbind(shortwalks,df) }
+# 
+# trip2014 <- rbind(trip2014,shortwalks)
+
+
+# build baseline= trips <> ind <> household
 str_sql <- 'SELECT T2.Age_B01ID, T2.Sex_B01ID, T2.CarAccess_B01ID, T2.NSSec_B03ID, 
 T2.IndIncome2002_B02ID, T2.EthGroupTS_B02ID, 
 
@@ -43,7 +53,7 @@ T1.SurveyYear, T1.TripID, T1.DayID, T1.IndividualID, T1.HouseholdID,
 T1.PSUID, T1.W5, T1.W5xHH, T1.TravDay, T1.SeriesCall_B01ID, T1.ShortWalkTrip_B01ID, 
 T1.NumStages, T1.MainMode_B03ID, T1.MainMode_B04ID, T1.MainMode_B11ID, T1.TripTotalTime, 
 T1.TripTravTime, T1.TripDisIncSW, T1.TripDisExSW, T1.JJXSC, T1.JOTXSC, T1.JTTXSC, 
-T1.JD, 0 AS Pcyc, 0 AS now_cycle, T3.HHoldGOR_B02ID 
+T1.JD, T3.HHoldGOR_B02ID 
 
 FROM (trip2014 as T1 INNER JOIN ind2014 as T2 ON T1.IndividualID  = T2.IndividualID) 
 INNER JOIN household2014 as T3 ON T1.HouseholdID  = T3.HouseholdID  
@@ -51,9 +61,25 @@ INNER JOIN household2014 as T3 ON T1.HouseholdID  = T3.HouseholdID
 WHERE (((T2.Age_B01ID)>=8) AND ((T3.HHoldGOR_B02ID)<10))
 ORDER BY T3.HHoldGOR_B02ID '
 
-
 bl2014 <-sqldf(x =str_sql)
 names(bl2014)
+
+
+# process short walks
+shortwalks <- bl2014[bl2014$MainMode_B03ID==1,]
+shortwalks <- data.frame()
+
+for (i in 1:6) {shortwalks <- rbind(shortwalks,df)}
+bl2014 <- rbind(bl2014,shortwalks)
+
+
+#cycling related vars
+bl2014$Cycled = bl2014$Pcyc = bl2014$now_cycle = 0
+sel = ( bl2014$MainMode_B03ID == 3 )
+bl2014$Cycled[sel] = 1
+
+bl2014 = setDT(bl2014)[, cyclist := max(Cycled == 1), by = IndividualID]  #flag actual cyclists
+bl2014 = as.data.frame(bl2014)  
 
 #add extra variables for scenarios build
 bl2014$Age  = bl2014$Sex  =NA
@@ -64,10 +90,11 @@ bl2014$Sex[bl2014$Sex_B01ID== 2] <- 'Female'
 bl2014$agesex <- paste0(bl2014$Age, bl2014$Sex)
 
 
-########        CALCULATE TOTAL P.A. = 1.NTS  + 2. APS recreational  (WALKING + CYCLING)
+########        CALCULATE P.A. = NTS  + APS recreational  (WALKING + CYCLING)
 
 ## 1: NTS WALKING:  stages time/distance, as per agreed rules 
 
+# utility walking:
 str_sql <- 'SELECT T1.TripID, T1.TripPurpose_B01ID, T2.StageID, T2.IndividualID, T2.StageDistance, 
 T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, 
 T2.StageShortWalk_B01ID, T2.SD, T2.STTXSC
@@ -96,8 +123,8 @@ ORDER BY T1.TripID '
 cyclestages <- sqldf(x=str_sql)
 
 ###### calculate NTS TIMES/DISTANCES per trip (NTS)
-str_sql <- 'SELECT T1.TripID, Sum(T1.StageDistance) AS SumofWStageDistance, 
-Sum(T1.StageTime) AS SumOfWStageTime
+str_sql <- 'SELECT T1.TripID, Sum(T1.StageDistance) AS SumWStageDistance, 
+Sum(T1.StageTime) AS SumWStageTime
 
 FROM walkstages AS T1 GROUP BY T1.TripID   '
 
@@ -105,8 +132,8 @@ walktrips <- sqldf(x= str_sql)    # walked trips
 
 #########
 
-str_sql <- 'SELECT T1.TripID, Sum(T1.StageDistance) AS SumofCStageDistance, 
-Sum(T1.StageTime) AS SumOfCStageTime
+str_sql <- 'SELECT T1.TripID, Sum(T1.StageDistance) AS SumCStageDistance, 
+Sum(T1.StageTime) AS SumCStageTime
 
 FROM cyclestages AS T1 GROUP BY T1.TripID   ' 
 
@@ -120,11 +147,11 @@ bl2014  = left_join(bl2014, walktrips, by ="TripID")
 bl2014  = left_join(bl2014, cycletrips, by ="TripID")
 rm(walktrips, cycletrips)
 
-bl2014$SumofWStageDistance[is.na(bl2014$SumofWStageDistance)] = 0
-bl2014$SumOfWStageTime[is.na(bl2014$SumOfWStageTime)] = 0
+bl2014$SumWStageDistance[is.na(bl2014$SumWStageDistance)] = 0
+bl2014$SumWStageTime[is.na(bl2014$SumWStageTime)] = 0
 
-bl2014$SumofCStageDistance[is.na(bl2014$SumofCStageDistance) ]  = 0
-bl2014$SumOfCStageTime[is.na(bl2014$SumOfCStageTime) ]  = 0
+bl2014$SumCStageDistance[is.na(bl2014$SumCStageDistance) ]  = 0
+bl2014$SumCStageTime[is.na(bl2014$SumCStageTime) ]  = 0
 
 
 ################## MATCHING individuals <>  A.P.S. 
@@ -133,6 +160,10 @@ bl2014$SumOfCStageTime[is.na(bl2014$SumOfCStageTime) ]  = 0
 datapath = './data/'
 aps  = readRDS(paste0(datapath,'aps_proc.Rds')) #latest v3 file from Anna
 aps$region = as.character(aps$region)
+
+#eliminate all NAs (Anna's file has them)
+aps = aps[! (is.na(aps[ ,'id']) | is.na(aps[ ,'nonwhite']) |  is.na(aps[ ,'age'])  ) , ]
+sum(is.na(aps))   #check no NAs left
 
 #recode region-sex-age bands - walk duration
 aps$region  = recode(.x  = aps$region,  "East" = 6, "East Midlands" = 4, "London" = 7, 
@@ -159,6 +190,7 @@ aps$bin.days_cycle_all_wk  = 0
 sel = (aps$days_cycle_all_wk > 0.75) 
 aps$bin.days_cycle_all_wk [ sel ]  = 1
 
+#############  PROCESS INDIVIDUALS
 # impute cycling in ind2014
 ind2014$BicycleFreq_B01ID = recode(ind2014$BicycleFreq_B01ID, '-10'= 0, '-9'= 0, '-8'= 0,
                                    '1'= 1, '2'=1, '3'= 0, '4'= 0, '5'= 0, '6'= 0, '7'= 0)
@@ -166,24 +198,20 @@ ind2014$BicycleFreq_B01ID = recode(ind2014$BicycleFreq_B01ID, '-10'= 0, '-9'= 0,
 sel = ( ind2014$Cycle12_B01ID== 2 | ind2014$Cycle12_B01ID== 3)
 ind2014$BicycleFreq_B01ID[ sel ] = 0
 
-
-### MATCHING APS vs. individuals 
-### initially on 6 [7] variables: age-sex-region-ethnicity-walking-cycling - [SES]
-
 # add region to ind2014
 ind2014 = inner_join(ind2014, household2014, by = "HouseholdID")
-ind2014 = ind2014[ind2014$HHoldGOR_B02ID<10, ]   #only England
+ind2014 = ind2014[ind2014$HHoldGOR_B02ID<10, ]   #subset to England
 
 # add WC times per individual
-str_sql='select T1.*, sum(T2.SumOfWStageTime) AS WalkTime, sum(T2.SumOfCStageTime) AS CycleTime
+str_sql='select T1.*, sum(T2.SumWStageTime) AS WalkTime, sum(T2.SumCStageTime) AS CycleTime
 
         FROM ind2014 AS T1 
         LEFT JOIN bl2014 AS T2 
         ON T1.IndividualID=T2.IndividualID
         GROUP BY T1.IndividualID    '
 
-indiv.MET = sqldf(str_sql)      # 135K people w trips + 42,441 w/o
-indiv.MET$withtrips[is.na(indiv.MET$withtrips)] = 0
+indiv.MET = sqldf(str_sql)      
+
 
 indiv.MET$WalkTime[is.na(indiv.MET$WalkTime)] = indiv.MET$CycleTime[is.na(indiv.MET$CycleTime)] = 0
 
@@ -194,7 +222,14 @@ indiv.MET$CycleTime.h = round(indiv.MET$CycleTime/60, digits = 1)
 indiv.MET$bin.WalkTime.h = cut(x = indiv.MET$WalkTime.h, breaks  = c(0, 1, 3, 6, Inf),
                                labels = c(0:3), right = F)
 
-#match 6 vars
+#create separate file of people w/o trips
+indiv.notrips = indiv.MET[ !(indiv.MET$IndividualID %in% bl2014$IndividualID), ]
+saveRDS(object = indiv.notrips, file.path(datapath, 'indiv.notrips.Rds'))
+
+### MATCHING APS vs. NTS individuals 
+### initially on 6 [7] variables: age-sex-region-ethnicity-walking-cycling - [SES]
+
+# 6 vars
 str_sql  = "SELECT T1.id, T1.weightla_truepop, T1.mets_sport_wk,
             (T1.dur_walk10_healthrec_wk/2) AS walkAPS, T1.dur_cycle_rec_wk AS cycleAPS,
             T2.IndividualID, T2.Age_B01ID, T2.Sex_B01ID, T2.HHoldGOR_B02ID,
@@ -209,13 +244,13 @@ str_sql  = "SELECT T1.id, T1.weightla_truepop, T1.mets_sport_wk,
            AND (T1.[bin.dur_walk10_utility_wk] =  T2.[bin.WalkTime.h] ) 
            AND (T1.[bin.days_cycle_all_wk] = T2.[BicycleFreq_B01ID]  ) "
 
-                #    APS variables   <>  NTS variables
+           #    APS variables   <>  NTS variables
 
 nts.aps.match  = sqldf(x =str_sql)
 sum(!indiv.MET$IndividualID %in% nts.aps.match$IndividualID)
-## match results: 138,644 matched | 17,827 unmatched  
+## match results: 138,377 matched | 18,094 unmatched  
 
-# rest: match 4 vars
+# rest: 4 vars
 indiv.MET1 = indiv.MET [! indiv.MET$IndividualID %in% nts.aps.match$IndividualID,  ]
 str_sql1  = "SELECT T1.id, T1.weightla_truepop, T1.mets_sport_wk,
             (T1.dur_walk10_healthrec_wk/2) AS walkAPS, T1.dur_cycle_rec_wk AS cycleAPS,
@@ -241,9 +276,11 @@ nts.aps = rbind(nts.aps.match, nts.aps.match1) ; rm(nts.aps.match, nts.aps.match
 
 #samples 1 individual per match, probabilistic extraction
 nts.aps <- setDT(nts.aps)[,if(.N<1) .SD 
-                          else .SD[sample(.N,1,replace=F, prob = weightla_truepop)], by=IndividualID]
+                          else .SD[sample(.N,1, replace=F, prob = weightla_truepop)], by=IndividualID]
 
+
+nts.aps = as.data.frame(nts.aps)   #convert to DF, otherwise problems in ICT
 
 saveRDS(object = nts.aps, file.path(datapath, 'nts.aps.Rds'))
-saveRDS(object = bl2014, file.path(datapath, 'bl2014.Rds'))
+saveRDS(object = bl2014, file.path(datapath, 'bl2014_APS.Rds'))
 
