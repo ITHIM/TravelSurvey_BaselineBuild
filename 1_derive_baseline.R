@@ -4,6 +4,8 @@ library(sqldf)
 library(dplyr)
 library(data.table)
 
+options("scipen" = 20)
+
 ####################### STARTS BUILD PROCESS OF BASELINE ###############################
 
 # make files thinner for inner_join 
@@ -22,7 +24,6 @@ ind2014 <- ind2014[   ,  c('IndividualID', 'HouseholdID', 'Age_B01ID',  'Sex_B01
 household2014  <- household2014[ ,c('HouseholdID', 'HHoldGOR_B02ID')]
 
 
-# filter days/stages
 stage2014 <- stage2014[ ,c('SurveyYear', 'StageID', 'TripID', 'DayID', 
                            'IndividualID', 'HouseholdID', 'PSUID', 'VehicleID', 'StageShortWalk_B01ID',
                            'IndTicketID', 'PersNo', 'TravDay', 'JourSeq', 'StageMode_B03ID',
@@ -35,15 +36,6 @@ stage2014 <- stage2014[ ,c('SurveyYear', 'StageID', 'TripID', 'DayID',
 
 
 #### Create INITIAL BASELINE  = no mMETs , filtered to >=18 y.o., English regions 1..9)
-
-# multiply short walks x6, then add to trips
-# df <- trip2014[trip2014$MainMode_B03ID==1,]
-# shortwalks <- data.frame()
-# 
-# for (i in 1:6) { shortwalks <- rbind(shortwalks,df) }
-# 
-# trip2014 <- rbind(trip2014,shortwalks)
-
 
 # build baseline= trips <> ind <> household
 str_sql <- 'SELECT T2.Age_B01ID, T2.Sex_B01ID, T2.CarAccess_B01ID, T2.NSSec_B03ID, 
@@ -59,14 +51,14 @@ FROM (trip2014 as T1 INNER JOIN ind2014 as T2 ON T1.IndividualID  = T2.Individua
 INNER JOIN household2014 as T3 ON T1.HouseholdID  = T3.HouseholdID  
 
 WHERE (((T2.Age_B01ID)>=8) AND ((T3.HHoldGOR_B02ID)<10))
-ORDER BY T3.HHoldGOR_B02ID '
+ORDER BY T1.TripID, T3.HHoldGOR_B02ID '
 
 bl2014 <-sqldf(x =str_sql)
 names(bl2014)
 
 
 # process short walks
-shortwalks <- bl2014[bl2014$MainMode_B03ID==1,]
+df <- bl2014[bl2014$MainMode_B03ID==1,]
 shortwalks <- data.frame()
 
 for (i in 1:6) {shortwalks <- rbind(shortwalks,df)}
@@ -105,8 +97,20 @@ WHERE   (T1.[TripPurpose_B01ID]<>17 AND T2.[StageMode_B04ID]= 1  AND T2.StageTim
 
 ORDER BY T1.TripID '
 
-walkstages <- sqldf(x= str_sql)
+utilwalkstages <- sqldf(x= str_sql)
 
+#all walking:
+str_sql <- 'SELECT T1.TripID, T1.TripPurpose_B01ID, T2.StageID, T2.IndividualID, T2.StageDistance, 
+T2.StageTime, T2.StageTime_B01ID, T2.StageMode_B03ID, T2.StageMode_B04ID, 
+T2.StageShortWalk_B01ID, T2.SD, T2.STTXSC
+
+FROM (trip2014 AS T1 INNER JOIN stage2014 AS T2 ON T1.TripID  = T2.TripID) 
+
+WHERE   T2.[StageMode_B04ID]= 1  
+
+ORDER BY T1.TripID '
+
+walkstages <- sqldf(x= str_sql)
 
 ## 2: NTS CYCLING:  stages time/distance 
 
@@ -130,6 +134,12 @@ FROM walkstages AS T1 GROUP BY T1.TripID   '
 
 walktrips <- sqldf(x= str_sql)    # walked trips
 
+str_sql <- 'SELECT T1.TripID, Sum(T1.StageDistance) AS SumutilWStageDistance, 
+Sum(T1.StageTime) AS SumutilWStageTime
+
+FROM utilwalkstages AS T1 GROUP BY T1.TripID   '
+
+utilwalktrips <- sqldf(x= str_sql)    # utility walk trips
 #########
 
 str_sql <- 'SELECT T1.TripID, Sum(T1.StageDistance) AS SumCStageDistance, 
@@ -141,14 +151,19 @@ cycletrips <- sqldf(x= str_sql)    # cycled trips
 
 rm(walkstages, cyclestages)
 
-#####################  COMBINE: add W/C stages METs times to bl trips (NTS)
+#####################  COMBINE: add W/C stages dist/times to bl trips (NTS)
 
 bl2014  = left_join(bl2014, walktrips, by ="TripID")
+bl2014  = left_join(bl2014, utilwalktrips, by ="TripID")
 bl2014  = left_join(bl2014, cycletrips, by ="TripID")
 rm(walktrips, cycletrips)
 
 bl2014$SumWStageDistance[is.na(bl2014$SumWStageDistance)] = 0
 bl2014$SumWStageTime[is.na(bl2014$SumWStageTime)] = 0
+
+bl2014$SumutilWStageDistance[is.na(bl2014$SumutilWStageDistance)] = 0
+bl2014$SumutilWStageTime[is.na(bl2014$SumutilWStageTime)] = 0
+
 
 bl2014$SumCStageDistance[is.na(bl2014$SumCStageDistance) ]  = 0
 bl2014$SumCStageTime[is.na(bl2014$SumCStageTime) ]  = 0
@@ -203,7 +218,9 @@ ind2014 = inner_join(ind2014, household2014, by = "HouseholdID")
 ind2014 = ind2014[ind2014$HHoldGOR_B02ID<10, ]   #subset to England
 
 # add WC times per individual
-str_sql='select T1.*, sum(T2.SumWStageTime) AS WalkTime, sum(T2.SumCStageTime) AS CycleTime
+str_sql='select T1.*, sum(T2.SumWStageTime) AS WalkTime, 
+                      sum(T2.SumutilWStageTime) AS utilWalkTime,
+                      sum(T2.SumCStageTime) AS CycleTime
 
         FROM ind2014 AS T1 
         LEFT JOIN bl2014 AS T2 
@@ -213,13 +230,14 @@ str_sql='select T1.*, sum(T2.SumWStageTime) AS WalkTime, sum(T2.SumCStageTime) A
 indiv.MET = sqldf(str_sql)      
 
 
-indiv.MET$WalkTime[is.na(indiv.MET$WalkTime)] = indiv.MET$CycleTime[is.na(indiv.MET$CycleTime)] = 0
-
+indiv.MET$WalkTime[is.na(indiv.MET$WalkTime)] = indiv.MET$CycleTime[is.na(indiv.MET$CycleTime)] = 
+    indiv.MET$utilWalkTime[is.na(indiv.MET$utilWalkTime)] = 0
 
 indiv.MET$WalkTime.h = round(indiv.MET$WalkTime/60, digits = 1)
+indiv.MET$utilWalkTime.h = round(indiv.MET$utilWalkTime/60, digits = 1)
 indiv.MET$CycleTime.h = round(indiv.MET$CycleTime/60, digits = 1)
 
-indiv.MET$bin.WalkTime.h = cut(x = indiv.MET$WalkTime.h, breaks  = c(0, 1, 3, 6, Inf),
+indiv.MET$bin.WalkTime.h = cut(x = indiv.MET$utilWalkTime.h, breaks  = c(0, 1, 3, 6, Inf),
                                labels = c(0:3), right = F)
 
 #create separate file of people w/o trips
