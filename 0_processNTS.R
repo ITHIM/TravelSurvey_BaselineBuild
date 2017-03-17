@@ -21,6 +21,7 @@ ficheros <-  dir(path = datapath,  pattern = '.tab')
 
 #individuals making the trips
 ind2014<- read.table(file.path(datapath,  "individual.tab"),  sep = "\t",  header = T)
+
 #18-84 y.o. + with travel diary
 ind2014<- subset(ind2014, subset = Age_B01ID >= 8 & Age_B01ID < 21 & SurveyYear>=2004 & W1==1 )  
 

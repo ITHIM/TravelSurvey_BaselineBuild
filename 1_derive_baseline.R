@@ -7,6 +7,8 @@ library(data.table)
 options("scipen" = 20)
 memory.size(max = T)
 
+datapath = './data/'
+
 ####################### STARTS BUILD PROCESS OF BASELINE ###############################
 
 # make files thinner for inner_join 
@@ -66,7 +68,9 @@ shortwalks <- data.frame()
 
 for (i in 1:6) {shortwalks <- rbind(shortwalks,df)}
 bl2014 <- rbind(bl2014,shortwalks)
+
 rm(df, shortwalks)
+
 
 #cycling related vars
 bl2014$Cycled = bl2014$Pcyc = bl2014$now_cycle = 0
@@ -172,6 +176,9 @@ bl2014$SumutilWStageTime[is.na(bl2014$SumutilWStageTime)] = 0
 bl2014$SumCStageDistance[is.na(bl2014$SumCStageDistance) ]  = 0
 bl2014$SumCStageTime[is.na(bl2014$SumCStageTime) ]  = 0
 
+# CHECK: create a unique TripID 
+bl2014$TripID <-  1:nrow(bl2014)
+
 saveRDS(object = bl2014, file.path(datapath, 'bl2014_APS.Rds'))  #save final baseline
 save.image()
 
@@ -179,7 +186,9 @@ save.image()
 #### prepare APS for the matching
 
 datapath = './data/'
-aps  = readRDS(paste0(datapath,'aps_proc.Rds')) #latest v3 file from Anna
+
+#latest *v4* file from Anna (adds the variable dur_walk10_all_wk’)
+aps  = readRDS(paste0(datapath,'aps_proc_v4.Rds')) 
 
 #eliminate all NAs from APS file
 aps = aps[! (is.na(aps[ ,'id']) | is.na(aps[ ,'nonwhite']) |  is.na(aps[ ,'age'])  ) , ]
@@ -205,9 +214,13 @@ labels  = c(8:21), right  = F)
 aps$ageband = as.integer(levels(aps$ageband))[aps$ageband]
 
 #recode duration of walking for 10+ min bouts
-aps$dur_walk10_utility_wk[is.na(aps$dur_walk10_utility_wk)] = 0
-aps$bin.dur_walk10_utility_wk  = cut(aps$dur_walk10_utility_wk, breaks  = c(0, 1, 3, 6, Inf), 
-                                labels =c(0:3), right = F)
+aps$dur_walk10_all_wk[ is.na(aps$dur_walk10_all_wk) ] = 0
+aps$bin.dur_walk10_all_wk  = cut(aps$dur_walk10_all_wk, breaks = c(-Inf, 2.5, 5, 10, Inf), 
+                                     labels =c(1:4), right = F)
+
+# aps$dur_walk10_utility_wk[is.na(aps$dur_walk10_utility_wk)] = 0
+# aps$bin.dur_walk10_utility_wk  = cut(aps$dur_walk10_utility_wk, breaks  = c(0, 1, 3, 6, Inf), 
+#                                 labels =c(0:3), right = F)
 
 #binary variable for total cycling
 aps$bin.days_cycle_all_wk  = 0
@@ -239,7 +252,6 @@ str_sql='select T1.*, sum(T2.SumWStageTime) AS WalkTime,
 
 indiv.MET = sqldf(str_sql)      
 
-
 indiv.MET$WalkTime[is.na(indiv.MET$WalkTime)] = indiv.MET$CycleTime[is.na(indiv.MET$CycleTime)] = 
     indiv.MET$utilWalkTime[is.na(indiv.MET$utilWalkTime)] = 0
 
@@ -247,14 +259,16 @@ indiv.MET$WalkTime.h = round(indiv.MET$WalkTime/60, digits = 1)
 indiv.MET$utilWalkTime.h = round(indiv.MET$utilWalkTime/60, digits = 1)
 indiv.MET$CycleTime.h = round(indiv.MET$CycleTime/60, digits = 1)
 
-indiv.MET$bin.WalkTime.h = cut(x = indiv.MET$utilWalkTime.h, breaks  = c(0, 1, 3, 6, Inf),
-                               labels = c(0:3), right = F)
+# indiv.MET$bin.WalkTime.h = cut(x = indiv.MET$utilWalkTime.h, breaks  = c(0, 1, 3, 6, Inf),
+#                                labels = c(0:3), right = F)
+
+indiv.MET$bin.WalkTime.h = cut(x = indiv.MET$utilWalkTime.h, breaks  = c(-Inf, 0, 2, 4, Inf),
+                               labels = c(1:4), right = T)
+
 
 #create separate file of people w/o trips
 indiv.notrips = indiv.MET[ !(indiv.MET$IndividualID %in% bl2014$IndividualID), ]
 saveRDS(object = indiv.notrips, file.path(datapath, 'indiv.notrips.Rds'))
-save.image()   # precaution
-
 
 ### MATCHING APS vs. NTS individuals 
 ### initially on 6 [7] variables: age-sex-region-ethnicity-walking-cycling - [SES]
