@@ -236,6 +236,7 @@ ind2014 = ind2014[ind2014$HHoldGOR_B02ID<10, ]   # 137,393 indiv.
 ind2014$BicycleFreq_B01ID = recode(ind2014$BicycleFreq_B01ID, '-10'= 0, '-9'= 0, '-8'= 0,
                                '1'= 1, '2'=1, '3'= 0, '4'= 0, '5'= 0, '6'= 0, '7'= 0)
 
+
 sel = ( ind2014$Cycle12_B01ID== 2 | ind2014$Cycle12_B01ID== 3)
 ind2014$BicycleFreq_B01ID[ sel ] = 0
 
@@ -286,25 +287,27 @@ str_sql  = "SELECT T1.id, T1.weightla_truepop, T1.mets_sport_wk,
            AND (T1.male  = T2.Sex_B01ID)
            AND (T1.region = T2.HHoldGOR_B02ID)
            AND (T1.nonwhite = T2.EthGroupTS_B02ID)
-           AND (T1.[bin.dur_walk10_utility_wk] =  T2.[bin.WalkTime.h] )
+           AND (T1.[bin.dur_walk10_all_wk] =  T2.[bin.WalkTime.h] )
            AND (T1.[bin.days_cycle_all_wk] = T2.[BicycleFreq_B01ID]  ) "
 
            #    APS variables   <>  NTS variables
 
+#method 1
 nts.aps  = sqldf(x =str_sql)
 
+#method 2
 nts.aps = inner_join(indiv.MET[,],  aps[,], 
                           
                           by=c( "Age_B01ID" = "ageband" , 
                                 "Sex_B01ID" = "male",
                                 "HHoldGOR_B02ID" = "region", 
                                 "EthGroupTS_B02ID" = "nonwhite" ,
-                                "bin.WalkTime.h"  = "bin.dur_walk10_utility_wk",
+                                "bin.WalkTime.h"  = "bin.dur_walk10_all_wk",
                                 "BicycleFreq_B01ID"  = "bin.days_cycle_all_wk"  )  )                               
 
 
 sum(!indiv.MET$IndividualID %in% nts.aps$IndividualID)
-## match results: 137,240 matched | 153 unmatched  
+## match results: 137,249 matched | 162 unmatched  
 
 # rest: 4 vars
 indiv.MET1 = indiv.MET [! indiv.MET$IndividualID %in% nts.aps$IndividualID,  ]
@@ -319,12 +322,14 @@ str_sql1  = "SELECT T1.id, T1.weightla_truepop, T1.mets_sport_wk,
            ON (T1.ageband = T2.Age_B01ID)
            AND (T1.male  = T2.Sex_B01ID)
            AND (T1.region = T2.HHoldGOR_B02ID)
-           AND (T1.[bin.dur_walk10_utility_wk] =  T2.[bin.WalkTime.h]  ) "
+           AND (T1.[bin.dur_walk10_all_wk] =  T2.[bin.WalkTime.h]  ) "
 
 #    APS variables   <>  NTS variables
 
+#method 1
 nts.aps1  = sqldf(x = str_sql1)
 
+#method 2
 nts.aps1 = inner_join(indiv.MET1[,], aps[, ], 
              by=c("Age_B01ID"  = "ageband" ,
                   "Sex_B01ID"  = "male",
@@ -346,6 +351,7 @@ nts.aps1 <- setDT(nts.aps1)[,if(.N<1) .SD
 nts.aps= rbind(nts.aps, nts.aps1)
 nts.aps = as.data.frame(nts.aps)   #convert to DF, otherwise problems in ICT
 
-saveRDS(object = nts.aps, file.path(datapath, 'nts.aps.Rds'))
 
+saveRDS(object = nts.aps, file.path(datapath, 'nts.aps.Rds'))
+rm(nts.aps1)
 
