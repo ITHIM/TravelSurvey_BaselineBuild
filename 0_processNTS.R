@@ -7,7 +7,11 @@
 #rm(list=ls())
 
 # define data path
-datapath ='V:/Studies/MOVED/HealthImpact/Data/National_Travel_Survey_2014/2014/tab/'
+# Read data from v drive
+# datapath ='V:/Studies/MOVED/HealthImpact/Data/National_Travel_Survey_2014/2014/tab/'
+
+# Read from local dir
+datapath ='data/National_Travel_Survey_2014/2014/tab/'
 
 #see all files
 ficheros <-  dir(path = datapath,  pattern = '.tab')
