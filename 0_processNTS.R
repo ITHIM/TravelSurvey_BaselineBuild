@@ -38,8 +38,6 @@ stage2014<- subset(stage2014, SurveyYear >= 2004)
 household2014 <- read.table(file.path(datapath, "household.tab"),  sep = "\t",  header = T,  as.is = T)
 household2014 <- subset(household2014, SurveyYear >= 2004)
 
-# trips (~the core of the baseline. colClasses needed due to file size)
-trip2014 <- read.table(file.path(datapath, "trip.tab"),  header = T,   sep = "\t", colClasses=c(rep("numeric", 63)))
-trip2014<- subset(trip2014, SurveyYear >= 2004)
+ 
 
 
