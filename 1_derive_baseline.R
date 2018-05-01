@@ -15,7 +15,7 @@ datapath = './data/'
 trip2014 <- trip2014[, c('SurveyYear', 'TripID', 'DayID', 'IndividualID', 'HouseholdID', 
                            'PSUID', 'W5', 'W5xHH', 'TravDay', 'SeriesCall_B01ID', 'ShortWalkTrip_B01ID', 
                            'NumStages', 'MainMode_B03ID', 'MainMode_B04ID', 'MainMode_B11ID',
-                           'TripPurpose_B01ID', 'TripPurpose_B02ID', 
+                           'TripPurpose_B01ID', 'TripPurpose_B02ID', 'TripPurpose_B04ID',
                            'TripTotalTime', 'TripTravTime', 'TripDisIncSW', 'TripDisExSW',
                            'JJXSC', 'JOTXSC', 'JTTXSC', 'JD')]
 
@@ -48,7 +48,7 @@ T1.SurveyYear, T1.TripID, T1.DayID, T1.IndividualID, T1.HouseholdID,
 T1.PSUID, T1.W5, T1.W5xHH, T1.TravDay, T1.SeriesCall_B01ID, T1.ShortWalkTrip_B01ID, 
 T1.NumStages, T1.MainMode_B03ID, T1.MainMode_B04ID, T1.MainMode_B11ID, T1.TripTotalTime, 
 T1.TripTravTime, T1.TripDisIncSW, T1.TripDisExSW, T1.JJXSC, T1.JOTXSC, T1.JTTXSC, 
-T1.JD, T3.HHoldGOR_B02ID 
+T1.JD, T1.TripPurpose_B04ID, T3.HHoldGOR_B02ID
 
 FROM (trip2014 as T1 INNER JOIN ind2014 as T2 ON T1.IndividualID  = T2.IndividualID) 
 INNER JOIN household2014 as T3 ON T1.HouseholdID  = T3.HouseholdID  
